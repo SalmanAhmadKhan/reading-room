@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Reading Room" />
+<meta name="theme-color" content="#13161b" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>The Reading Room</title>
+<style>
+  :root{
+    --roomCenter:#262b33; --roomEdge:#13161b;
+    --paper:#f4efe3; --paperEdge:#e9e2d2;
+    --ink:#2a2620; --inkSoft:#6f6657; --rule:#d8cfbd;
+    --lamp:#e0a458; --lampGlow:rgba(230,164,80,0.22);
+    --chrome:#8d94a0; --chromeDim:#5a616c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    min-height:100vh;
+    background:radial-gradient(120% 90% at 50% 22%, var(--roomCenter) 0%, var(--roomEdge) 78%);
+    background-attachment:fixed;
+    color:var(--chrome);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    display:flex;flex-direction:column;
+  }
+  #app{display:flex;flex-direction:column;min-height:100vh;}
+  header{padding:20px 22px 6px;display:flex;align-items:baseline;justify-content:space-between;}
+  .title{font-family:Georgia,'Times New Roman',serif;font-size:20px;letter-spacing:.5px;color:var(--paper);}
+  .subtitle{font-size:12px;color:var(--chromeDim);margin-top:2px;}
+  .count{font-size:12px;color:var(--chromeDim);}
+  main{flex:1;display:flex;flex-direction:column;padding:8px 18px 0;min-height:0;}
+
+  .centered{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;}
+
+
+  /* review filters — two rows */
+  .filter-wrap{position:absolute;top:4px;left:0;right:0;padding:0 14px;z-index:5;}
+  .filter-row{display:flex;align-items:center;overflow-x:auto;white-space:nowrap;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px 0;}
+  .filter-row::-webkit-scrollbar{display:none;}
+  .filter-row-label{font-size:10px;color:var(--chromeDim);letter-spacing:.5px;
+    text-transform:uppercase;margin-right:8px;flex:none;}
+  .filter-pill{display:inline-block;padding:5px 13px;border-radius:999px;font-size:12px;cursor:pointer;
+    margin-right:6px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:var(--chrome);
+    white-space:nowrap;transition:background .15s,color .15s,border-color .15s;}
+  .filter-pill.active{background:var(--lamp);color:#211a0e;border-color:var(--lamp);}
+  .filter-pill.book{border-color:rgba(141,148,160,0.35);}
+  .filter-pill.tag{border-color:rgba(224,164,88,0.4);color:var(--lamp);}
+  .filter-pill.tag.active{background:var(--lamp);color:#211a0e;}
+  .filter-label{font-size:11px;color:var(--chromeDim);margin:0 0 6px 2px;}
+  .active-filter-info{text-align:center;font-size:12px;color:var(--chromeDim);margin-bottom:6px;}
+  /* deprioritize */
+  .deprio-btn{border:none;background:transparent;font-size:11px;color:var(--inkSoft);
+    cursor:pointer;padding:3px 7px;border-radius:4px;margin-top:10px;opacity:.65;display:block;}
+  .deprio-btn:active{opacity:1;}
+  .deprio-badge{font-size:10px;color:var(--chromeDim);border:1px solid rgba(141,148,160,0.3);
+    border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+  .tags-display{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;}
+  .tag-chip{display:inline-block;font-size:11px;padding:3px 9px;border-radius:999px;
+    background:rgba(224,164,88,0.15);color:var(--lamp);border:1px solid rgba(224,164,88,0.3);}
+  .tag-chip.on-card{font-size:12px;padding:3px 10px;}
+  .tag-input-wrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+    background:var(--paper);border-radius:5px;padding:8px 10px;margin-bottom:11px;min-height:40px;}
+  .tag-input-wrap input{border:none;background:transparent;font-size:14px;color:var(--ink);
+    outline:none;flex:1;min-width:80px;padding:2px 0;}
+  .tag-rm{display:inline-flex;align-items:center;gap:3px;font-size:12px;padding:3px 8px 3px 10px;
+    border-radius:999px;background:rgba(224,164,88,0.18);color:var(--lamp);border:none;cursor:pointer;}
+  .tag-rm .x{font-size:14px;opacity:.6;margin-left:2px;}
+  .review{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;min-height:0;}
+  .glow{position:absolute;top:12%;width:340px;height:340px;border-radius:50%;
+    background:radial-gradient(circle,var(--lampGlow) 0%,rgba(0,0,0,0) 68%);filter:blur(8px);pointer-events:none;}
+  .card{position:relative;width:100%;max-width:440px;
+    background:linear-gradient(180deg,var(--paper) 0%,var(--paperEdge) 100%);
+    border-radius:6px;padding:34px 30px 28px;cursor:pointer;
+    box-shadow:0 18px 50px -18px rgba(0,0,0,0.7), inset 0 2px 0 rgba(255,255,255,0.4);}
+  .quote-mark{position:absolute;top:14px;left:22px;font-family:Georgia,serif;font-size:46px;line-height:1;color:var(--lamp);opacity:.55;}
+  .passage{font-family:Georgia,'Times New Roman',serif;line-height:1.55;color:var(--ink);margin:10px 0 0;}
+  .src-rule{height:1px;width:38px;background:var(--lamp);margin:22px 0 12px;}
+  .src{font-family:Georgia,serif;font-size:14px;color:var(--ink);font-style:italic;}
+  .src .author{color:var(--inkSoft);}
+  .note{margin-top:14px;font-size:13px;line-height:1.5;color:var(--inkSoft);}
+
+  .another{margin-top:28px;border:1px solid var(--lamp);background:transparent;color:var(--lamp);
+    padding:11px 26px;border-radius:999px;font-size:15px;letter-spacing:.3px;cursor:pointer;}
+  .hint{margin-top:12px;font-size:12px;color:var(--chromeDim);}
+
+  /* shelf */
+  .scroll{flex:1;overflow-y:auto;padding-bottom:16px;-webkit-overflow-scrolling:touch;}
+  .group-head{display:flex;align-items:baseline;gap:8px;margin:6px 2px 10px;}
+  .group-title{font-family:Georgia,serif;font-size:16px;color:var(--paper);}
+  .group-count{font-size:12px;color:var(--chromeDim);}
+  .strip{background:linear-gradient(180deg,var(--paper) 0%,var(--paperEdge) 100%);border-radius:5px;
+    padding:14px 14px 13px;margin-bottom:9px;box-shadow:0 6px 18px -10px rgba(0,0,0,0.6);}
+  .strip p{font-family:Georgia,serif;font-size:15px;line-height:1.5;color:var(--ink);margin:0;}
+  .strip-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;}
+  .strip-author{font-size:12px;color:var(--inkSoft);}
+  .remove{border:none;background:transparent;color:var(--inkSoft);font-size:12px;cursor:pointer;padding:2px 4px;}
+
+  /* add */
+  .form{max-width:460px;margin:0 auto;padding-top:6px;}
+  label{display:block;font-size:12px;color:var(--chrome);margin:2px 2px 6px;letter-spacing:.3px;}
+  textarea,input{width:100%;background:var(--paper);border:none;border-radius:5px;padding:12px 13px;
+    font-size:15px;color:var(--ink);margin-bottom:11px;outline:none;font-family:inherit;}
+  textarea{font-family:Georgia,serif;line-height:1.5;resize:vertical;}
+  textarea:focus,input:focus{box-shadow:0 0 0 2px var(--lampGlow);}
+  ::placeholder{color:var(--inkSoft);opacity:.75;}
+  .save{width:100%;margin-top:6px;border:none;border-radius:999px;padding:13px;font-size:15px;font-weight:600;
+    letter-spacing:.3px;color:#211a0e;background:var(--lamp);cursor:pointer;}
+  .save:disabled{color:var(--chromeDim);background:rgba(255,255,255,0.06);opacity:.7;cursor:default;}
+
+  /* empty */
+  .empty{max-width:300px;}
+  .empty .h{font-family:Georgia,serif;font-size:19px;color:var(--paper);margin-bottom:8px;}
+  .empty p{font-size:14px;color:var(--chromeDim);line-height:1.5;}
+  .empty .cta{margin-top:18px;border:1px solid var(--lamp);background:transparent;color:var(--lamp);
+    padding:10px 24px;border-radius:999px;font-size:15px;cursor:pointer;}
+
+  /* nav */
+  nav{display:flex;justify-content:space-around;align-items:center;
+    padding:10px 12px calc(12px + env(safe-area-inset-bottom));
+    border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.18);}
+  .nav-btn{background:transparent;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;
+    cursor:pointer;padding:4px 14px;color:var(--chromeDim);}
+  .nav-btn.active{color:var(--lamp);}
+  .nav-btn span{font-size:11px;letter-spacing:.3px;}
+
+  .search-bar{position:sticky;top:0;z-index:10;padding:8px 0 10px;
+    background:linear-gradient(180deg,var(--roomEdge) 60%,rgba(19,22,27,0) 100%);}
+  .search-input{width:100%;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);
+    border-radius:999px;padding:10px 16px 10px 38px;font-size:14px;color:var(--paper);
+    font-family:inherit;outline:none;}
+  .search-input:focus{border-color:var(--lamp);box-shadow:0 0 0 2px var(--lampGlow);}
+  .search-input::placeholder{color:var(--chromeDim);}
+  .search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);pointer-events:none;}
+  .search-clear{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;
+    border:none;color:var(--chromeDim);font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;}
+  .search-count{font-size:12px;color:var(--chromeDim);margin:0 2px 8px;text-align:center;}
+  .highlight-match{background:rgba(224,164,88,0.25);border-radius:2px;}
+  /* onboarding */
+  .onboard{position:fixed;inset:0;background:var(--roomEdge);z-index:100;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:32px 24px;text-align:center;}
+  .onboard-logo{font-family:Georgia,serif;font-size:32px;color:var(--paper);margin-bottom:6px;}
+  .onboard-sub{font-size:13px;color:var(--chromeDim);margin-bottom:40px;}
+  .onboard-steps{width:100%;max-width:380px;margin-bottom:36px;}
+  .onboard-step{display:flex;align-items:flex-start;gap:16px;margin-bottom:22px;text-align:left;}
+  .onboard-num{width:28px;height:28px;border-radius:50%;background:var(--lamp);color:#211a0e;
+    font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;}
+  .onboard-step p{font-size:14px;color:var(--chrome);line-height:1.5;margin:4px 0 0;}
+  .onboard-step strong{color:var(--paper);}
+  .onboard-start{width:100%;max-width:380px;border:none;border-radius:999px;padding:14px;
+    font-size:16px;font-weight:600;color:#211a0e;background:var(--lamp);cursor:pointer;}
+  /* share */
+  .share-btn{border:none;background:transparent;color:var(--chromeDim);font-size:12px;cursor:pointer;
+    padding:2px 0;margin-top:4px;display:block;text-align:center;}
+  .share-btn:active{color:var(--lamp);}
+  /* note-edit */width:100%;background:var(--paperEdge);border:1px solid var(--rule);border-radius:4px;
+    padding:8px 10px;font-size:13px;color:var(--ink);margin-top:8px;resize:vertical;font-family:inherit;line-height:1.45;}
+  .note-edit:focus{box-shadow:0 0 0 2px var(--lampGlow);outline:none;}
+  .note-actions{display:flex;gap:8px;margin-top:6px;justify-content:flex-end;}
+  .note-actions button{border:none;border-radius:4px;padding:5px 12px;font-size:12px;cursor:pointer;}
+  .note-save{background:var(--lamp);color:#211a0e;font-weight:600;}
+  .note-cancel{background:transparent;color:var(--inkSoft);}
+  .edit-btn{border:none;background:transparent;color:var(--inkSoft);font-size:12px;cursor:pointer;padding:2px 4px;}
+  /* import review */
+  .imp-head{max-width:460px;margin:0 auto 12px;}
+  .imp-title{font-family:Georgia,serif;font-size:17px;color:var(--paper);margin:4px 2px 10px;}
+  .imp-fields{display:flex;gap:8px;}
+  .imp-fields input{margin-bottom:8px;}
+  .imp-item{display:flex;gap:11px;align-items:flex-start;background:linear-gradient(180deg,var(--paper) 0%,var(--paperEdge) 100%);
+    border-radius:5px;padding:12px 13px;margin:0 auto 8px;max-width:460px;box-shadow:0 6px 18px -10px rgba(0,0,0,0.6);}
+  .imp-item input[type=checkbox]{width:18px;height:18px;margin:2px 0 0;accent-color:var(--lamp);flex:none;}
+  .imp-item .t{font-family:Georgia,serif;font-size:14px;line-height:1.5;color:var(--ink);}
+  .imp-item .b{font-size:11px;color:var(--inkSoft);margin-top:5px;font-style:italic;}
+  .imp-actions{position:sticky;bottom:0;padding:10px 0 6px;max-width:460px;margin:0 auto;display:flex;gap:10px;
+    background:linear-gradient(180deg,rgba(19,22,27,0) 0%,var(--roomEdge) 40%);}
+  .imp-go{flex:2;border:none;border-radius:999px;padding:13px;font-size:15px;font-weight:600;color:#211a0e;background:var(--lamp);cursor:pointer;}
+  .imp-go:disabled{color:var(--chromeDim);background:rgba(255,255,255,0.06);opacity:.7;}
+  .imp-cancel{flex:1;border:1px solid rgba(141,148,160,0.4);background:transparent;color:var(--chrome);border-radius:999px;font-size:14px;cursor:pointer;}
+  /* backup */
+  .backup{margin:10px 2px 4px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07);}
+  .backup-label{font-size:12px;color:var(--chromeDim);margin-bottom:10px;}
+  .backup-row{display:flex;gap:10px;}
+  .backup-btn{flex:1;border:1px solid rgba(141,148,160,0.4);background:transparent;color:var(--chrome);
+    padding:10px;border-radius:8px;font-size:13px;cursor:pointer;}
+  .backup-btn:active{transform:scale(.97);}
+  #toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%) translateY(20px);
+    background:var(--paper);color:var(--ink);font-size:13px;padding:10px 16px;border-radius:999px;
+    box-shadow:0 8px 24px -8px rgba(0,0,0,0.6);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:50;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  @keyframes pageIn{0%{opacity:0;transform:translateY(14px) scale(.985);}100%{opacity:1;transform:none;}}
+  .page-in{animation:pageIn 520ms cubic-bezier(.2,.7,.2,1) both;}
+  .btn-press:active{transform:scale(.97);}
+  @media (prefers-reduced-motion:reduce){.page-in{animation:none;}}
+  /* sync dot */
+  #sync-dot{width:7px;height:7px;border-radius:50%;margin-left:7px;display:inline-block;vertical-align:middle;background:var(--chromeDim);}
+  #sync-dot.ok{background:#5cb87a;}
+  #sync-dot.syncing{background:var(--lamp);animation:pulse 1s infinite;}
+  #sync-dot.error{background:#d06060;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  /* settings */
+  .settings{flex:1;overflow-y:auto;padding-bottom:20px;}
+  .settings-section{max-width:460px;margin:0 auto 24px;}
+  .settings-section h3{font-family:Georgia,serif;font-size:15px;color:var(--paper);margin:14px 2px 10px;}
+  .settings-section p{font-size:13px;color:var(--chromeDim);line-height:1.55;margin:0 2px 10px;}
+  .settings-section a{color:var(--lamp);}
+  .settings-row{margin-bottom:10px;}
+  .settings-row label{display:block;font-size:12px;color:var(--chrome);margin-bottom:5px;}
+  .settings-row input{width:100%;background:var(--paper);border:none;border-radius:5px;padding:11px 13px;
+    font-size:13px;color:var(--ink);outline:none;font-family:monospace;}
+  .settings-row input:focus{box-shadow:0 0 0 2px var(--lampGlow);}
+  .sync-key-row{display:flex;gap:8px;align-items:stretch;}
+  .sync-key-row input{flex:1;}
+  .copy-btn{border:1px solid rgba(141,148,160,0.4);background:transparent;color:var(--chrome);
+    border-radius:5px;padding:0 14px;font-size:13px;cursor:pointer;white-space:nowrap;}
+  .settings-save{width:100%;border:none;border-radius:999px;padding:13px;font-size:15px;font-weight:600;
+    color:#211a0e;background:var(--lamp);cursor:pointer;margin-top:6px;}
+  .settings-save:disabled{color:var(--chromeDim);background:rgba(255,255,255,0.06);opacity:.7;}
+  .sync-status-line{font-size:12px;color:var(--chromeDim);margin:8px 2px 0;min-height:18px;}
+  .sync-now-btn{width:100%;border:1px solid rgba(141,148,160,0.3);background:transparent;color:var(--chrome);
+    border-radius:999px;padding:11px;font-size:14px;cursor:pointer;margin-top:8px;}
+  .divider{border:none;border-top:1px solid rgba(255,255,255,0.06);margin:4px 0 18px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <div class="title">The Reading Room</div>
+      <div class="subtitle">passages worth returning to &middot; v10 <span id="sync-dot" title="Sync status"></span></div>
+    </div>
+    <div class="count" id="count">0 saved</div>
+  </header>
+  <main id="main"></main>
+  <nav id="nav"></nav>
+</div>
+<div id="onboard" class="onboard" style="display:none">
+  <div class="onboard-logo">" The Reading Room</div>
+  <div class="onboard-sub">passages worth returning to</div>
+  <div class="onboard-steps">
+    <div class="onboard-step"><div class="onboard-num">1</div><p><strong>Import your highlights</strong> from Kindle's My Clippings.txt, a Goodreads notes page, or any PDF.</p></div>
+    <div class="onboard-step"><div class="onboard-num">2</div><p><strong>The app surfaces one passage at a time</strong>, randomly. Tap the card or "Another passage" for the next.</p></div>
+    <div class="onboard-step"><div class="onboard-num">3</div><p><strong>Add notes and tags</strong> to passages on the Shelf. Filter by book or theme in Review.</p></div>
+  </div>
+  <button class="onboard-start btn-press" id="onboard-start">Get started</button>
+  <button class="share-btn" style="margin-top:16px;" onclick="shareApp()">Share this app with a friend ↗</button>
+</div>
+<input type="file" id="import-file" accept=".json,.html,.htm,.txt,.pdf,application/json,text/html,text/plain,application/pdf" style="display:none" />
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY="reading_room_v1";
+  var SETTINGS_KEY="reading_room_settings_v1";
+  var lampGlow="rgba(230,164,80,0.22)";
+
+  var SEED=[{
+    id:uid(),
+    text:"You have power over your mind \u2014 not outside events. Realize this, and you will find strength.",
+    book:"Meditations", author:"Marcus Aurelius", note:"", createdAt:Date.now()
+  }];
+
+  var state={highlights:[],view:"review",currentId:null,lastId:null,
+    searchQuery:"",
+    reviewFilter:{type:"all",value:""},
+    form:{text:"",book:"",author:"",note:"",tags:[]}};
+
+  function uid(){
+    return (window.crypto&&crypto.randomUUID)?crypto.randomUUID()
+      :Date.now().toString(36)+Math.random().toString(36).slice(2);
+  }
+
+  // ── settings & sync state ──────────────────────────────────────────
+  var syncStatus="idle"; // idle | syncing | ok | error
+  var syncMsg="";
+
+  function loadSettings(){
+    try{var r=localStorage.getItem(SETTINGS_KEY);if(r)return JSON.parse(r);}catch(e){}
+    return null;
+  }
+  function saveSettings(s){
+    try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));}catch(e){}
+  }
+  var settings=loadSettings()||{url:"",key:"",shelfId:uid(),enabled:false};
+
+  function setSyncStatus(s,msg){
+    syncStatus=s;syncMsg=msg||"";
+    var dot=document.getElementById("sync-dot");
+    if(dot){dot.className=s==="idle"?"":s;dot.title=msg||"";}
+  }
+
+  // ── Supabase REST helpers ──────────────────────────────────────────
+  function sbHeaders(){
+    return {"apikey":settings.key,"Authorization":"Bearer "+settings.key,
+      "Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};
+  }
+  function sbUrl(path){return settings.url.replace(/\/+$/,"")+"/rest/v1/"+path;}
+
+  async function sbFetch(path,opts){
+    var r=await fetch(sbUrl(path),Object.assign({headers:sbHeaders()},opts));
+    if(!r.ok){var t=await r.text().catch(function(){return r.status;});throw new Error(t);}
+    return r.json().catch(function(){return null;});
+  }
+
+  function toRow(h){
+    return {id:h.id,shelf_id:settings.shelfId,
+      text:h.text||"",book:h.book||"",author:h.author||"",note:h.note||"",
+      tags:JSON.stringify(h.tags||[]),
+      created_at:h.createdAt||Date.now(),
+      updated_at:h.updatedAt||h.createdAt||Date.now(),
+      deleted:false};
+  }
+  function fromRow(r){
+    var tags=[];try{tags=JSON.parse(r.tags||"[]");}catch(e){}
+    return {id:r.id,text:r.text||"",book:r.book||"",author:r.author||"",
+      note:r.note||"",tags:tags,createdAt:r.created_at,updatedAt:r.updated_at};
+  }
+
+  async function syncDown(){
+    if(!settings.enabled||!settings.url||!settings.key)return;
+    setSyncStatus("syncing","Fetching from cloud…");
+    try{
+      var rows=await sbFetch("highlights?shelf_id=eq."+encodeURIComponent(settings.shelfId)+"&select=*");
+      if(!Array.isArray(rows)){
+        setSyncStatus("error","Bad response: "+JSON.stringify(rows).slice(0,120));
+        return;
+      }
+      var activeRows=rows.filter(function(r){return !r.deleted;});
+      var localMap={};
+      state.highlights.forEach(function(h){localMap[h.id]=h;});
+      rows.forEach(function(r){
+        if(r.deleted){delete localMap[r.id];return;}
+        var loc=localMap[r.id];
+        var remoteNewer=(r.updated_at||0)>(loc?(loc.updatedAt||loc.createdAt||0):0);
+        if(!loc||remoteNewer)localMap[r.id]=fromRow(r);
+      });
+      state.highlights=Object.values(localMap);
+      state.highlights.sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);});
+      save(true);
+      setSyncStatus("ok","Synced \u2014 "+activeRows.length+" in cloud, "+state.highlights.length+" total");
+      render();
+    }catch(e){setSyncStatus("error","Sync failed: "+e.message);}
+  }
+
+  async function syncUp(highlights,deletedIds){
+    if(!settings.enabled||!settings.url||!settings.key)return;
+    setSyncStatus("syncing","Saving to cloud…");
+    try{
+      if(highlights&&highlights.length){
+        await sbFetch("highlights",{method:"POST",body:JSON.stringify(highlights.map(toRow))});
+      }
+      if(deletedIds&&deletedIds.length){
+        await Promise.all(deletedIds.map(function(id){
+          return sbFetch("highlights",{method:"POST",
+            body:JSON.stringify([{id:id,shelf_id:settings.shelfId,text:" ",book:"",author:"",note:"",
+              tags:"[]",created_at:Date.now(),updated_at:Date.now(),deleted:true}])});
+        }));
+      }
+      setSyncStatus("ok","Uploaded "+highlights.length+" to cloud");
+    }catch(e){setSyncStatus("error","Upload failed: "+e.message);}
+  }
+
+  async function syncNow(){
+    await syncDown();
+    if(state.highlights.length)await syncUp(state.highlights,[]);
+  }
+
+  function extractHashtags(s){
+    if(!s)return [];
+    var m=s.match(/#[A-Za-z]\w*/g);
+    if(!m)return [];
+    return m.map(function(t){return t.slice(1);});
+  }
+  function getAllTags(h){
+    var tags=(h.tags||[]).slice();
+    var from=extractHashtags(h.note);
+    from.forEach(function(t){
+      if(tags.indexOf(t)===-1)tags.push(t);
+    });
+    return tags;
+  }
+  function collectAllTags(){
+    var set={};
+    state.highlights.forEach(function(h){
+      getAllTags(h).forEach(function(t){set[t]=true;});
+    });
+    return Object.keys(set).sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
+  }
+  function collectBooks(){
+    var set={};
+    state.highlights.forEach(function(h){if(h.book)set[h.book]=true;});
+    return Object.keys(set).sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
+  }
+  function getFiltered(){
+    var f=state.reviewFilter;
+    if(f.type==="all")return state.highlights;
+    if(f.type==="book")return state.highlights.filter(function(h){return h.book===f.value;});
+    if(f.type==="tag")return state.highlights.filter(function(h){return getAllTags(h).indexOf(f.value)!==-1;});
+    return state.highlights;
+  }
+  function load(){
+    try{var raw=localStorage.getItem(KEY);if(raw){var d=JSON.parse(raw);
+      if(d&&Array.isArray(d.highlights))return d.highlights;}}catch(e){}
+    return null;
+  }
+  function save(skipSync){
+    try{localStorage.setItem(KEY,JSON.stringify({highlights:state.highlights,seeded:true}));}
+    catch(e){console.error("Couldn't save:",e);}
+    if(!skipSync)syncUp(state.highlights,[]).catch(function(){});
+  }
+  function esc(s){return (s||"").replace(/[&<>"]/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
+
+  function pickRandom(){
+    var hs=getFiltered();
+    if(!hs.length){state.currentId=null;return;}
+    if(hs.length===1){state.currentId=hs[0].id;state.lastId=hs[0].id;return;}
+    // weighted pool: normal=5 slots, deprioritized=1 slot
+    var pool=[];
+    hs.forEach(function(h){
+      var w=h.deprioritized?1:5;
+      for(var i=0;i<w;i++)pool.push(h.id);
+    });
+    var candidates=pool.filter(function(id){return id!==state.lastId;});
+    if(!candidates.length)candidates=pool;
+    var picked=candidates[Math.floor(Math.random()*candidates.length)];
+    state.lastId=picked;state.currentId=picked;
+  }
+
+  function render(){
+    document.getElementById("count").textContent=state.highlights.length+" saved";
+    var main=document.getElementById("main");
+    main.innerHTML="";
+    if(state.view==="review")main.appendChild(renderReview());
+    else if(state.view==="library")main.appendChild(renderLibrary());
+    else if(state.view==="importReview")main.appendChild(renderImportReview());
+    else if(state.view==="settings")main.appendChild(renderSettings());
+    else main.appendChild(renderAdd());
+    renderNav();
+  }
+
+  function renderReview(){
+    var wrap=document.createElement("div");
+    if(!state.highlights.length){
+      wrap.className="centered";
+      wrap.appendChild(emptyState());
+      return wrap;
+    }
+
+    wrap.className="review";
+
+    // filter bar — two rows: books + tags
+    var books=collectBooks();
+    var tags=collectAllTags();
+    var hasFilters=books.length>1||tags.length;
+    var filterHeight=hasFilters?(tags.length?68:36):0;
+    if(hasFilters){
+      var fw=document.createElement("div");fw.className="filter-wrap";
+      var f=state.reviewFilter;
+      function makePill(label,type,value,cls){
+        var p=document.createElement("button");
+        p.className="filter-pill "+(cls||"")+(f.type===type&&f.value===value?" active":"");
+        p.textContent=label;
+        p.addEventListener("click",function(){
+          state.reviewFilter={type:type,value:value};
+          state.currentId=null;state.lastId=null;
+          pickRandom();render();
+        });
+        return p;
+      }
+      // row 1: All + books
+      var row1=document.createElement("div");row1.className="filter-row";
+      row1.innerHTML='<span class="filter-row-label">Book</span>';
+      row1.appendChild(makePill("All","all","",""));
+      books.forEach(function(b){row1.appendChild(makePill(b,"book",b,"book"));});
+      fw.appendChild(row1);
+      // row 2: tags (only if any exist)
+      if(tags.length){
+        var row2=document.createElement("div");row2.className="filter-row";row2.style.marginTop="4px";
+        row2.innerHTML='<span class="filter-row-label">Theme</span>';
+        tags.forEach(function(t){row2.appendChild(makePill("#"+t,"tag",t,"tag"));});
+        fw.appendChild(row2);
+      }
+      wrap.appendChild(fw);
+    }
+
+    var filtered=getFiltered();
+    if(!filtered.length){
+      var msg=document.createElement("div");msg.style.cssText="text-align:center;color:var(--chromeDim);font-size:14px;padding:40px 20px;";
+      msg.textContent="No passages match this filter.";
+      wrap.appendChild(msg);return wrap;
+    }
+
+    if(!state.currentId||!filtered.some(function(x){return x.id===state.currentId;}))pickRandom();
+    var h=filtered.filter(function(x){return x.id===state.currentId;})[0];
+    if(!h){pickRandom();h=filtered.filter(function(x){return x.id===state.currentId;})[0];}
+
+    var glow=document.createElement("div");glow.className="glow";wrap.appendChild(glow);
+
+    var card=document.createElement("div");
+    card.className="card page-in";
+    // push card down to clear filter rows
+    if(hasFilters)card.style.marginTop=(filterHeight+8)+"px";
+    var big=h.text.length>220;
+    var srcHtml="";
+    if(h.book||h.author){
+      srcHtml='<div class="src-rule"></div><div class="src">'+esc(h.book)+
+        (h.author?' <span class="author">\u2014 '+esc(h.author)+'</span>':'')+'</div>';
+    }
+    var noteHtml=h.note?'<p class="note">'+esc(h.note)+'</p>':'';
+    var htags=getAllTags(h);
+    var tagsHtml="";
+    if(htags.length){
+      tagsHtml='<div class="tags-display">';
+      htags.forEach(function(t){tagsHtml+='<span class="tag-chip on-card">#'+esc(t)+'</span>';});
+      tagsHtml+='</div>';
+    }
+    card.innerHTML='<span class="quote-mark">\u201C</span>'+
+      '<p class="passage" style="font-size:'+(big?18:21)+'px">'+esc(h.text)+'</p>'+
+      srcHtml+noteHtml+tagsHtml;
+
+    // deprioritize button inside card
+    var dBtn=document.createElement("button");
+    dBtn.className="deprio-btn btn-press";
+    dBtn.textContent=h.deprioritized?"↑ Restore priority":"↓ Show less often";
+    dBtn.addEventListener("click",function(e){
+      e.stopPropagation();
+      h.deprioritized=!h.deprioritized;
+      h.updatedAt=Date.now();
+      save();
+      dBtn.textContent=h.deprioritized?"↑ Restore priority":"↓ Show less often";
+      toast(h.deprioritized?"Will appear less often":"Priority restored");
+    });
+    card.appendChild(dBtn);
+
+    card.addEventListener("click",function(){next();});
+    wrap.appendChild(card);
+
+    // info line
+    if(state.reviewFilter.type!=="all"){
+      var info=document.createElement("div");info.className="active-filter-info";
+      info.style.marginTop="14px";
+      info.textContent=filtered.length+" passage"+(filtered.length===1?"":"s")+" in this filter";
+      wrap.appendChild(info);
+    }
+
+    var btn=document.createElement("button");
+    btn.className="another btn-press";btn.textContent="Another passage";
+    btn.addEventListener("click",function(e){e.stopPropagation();next();});
+    wrap.appendChild(btn);
+
+    var hint=document.createElement("div");
+    hint.className="hint";hint.textContent="a finite shelf \u2014 not an endless feed";
+    wrap.appendChild(hint);
+    var sh=document.createElement("button");sh.className="share-btn";sh.textContent="Share with a friend \u2197";
+    sh.addEventListener("click",function(){shareApp();});
+    wrap.appendChild(sh);
+    return wrap;
+  }
+
+  function next(){pickRandom();render();}
+
+  function renderLibrary(){
+    var wrap=document.createElement("div");
+    if(!state.highlights.length){
+      wrap.className="centered";wrap.appendChild(emptyState());return wrap;
+    }
+    wrap.className="scroll";
+
+    // search bar
+    var bar=document.createElement("div");bar.className="search-bar";bar.style.position="sticky";
+    bar.innerHTML='<div style="position:relative;">'+
+      '<svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none">'+
+      '<circle cx="11" cy="11" r="7" stroke="var(--chromeDim)" stroke-width="2"/>'+
+      '<path d="M16 16l4.5 4.5" stroke="var(--chromeDim)" stroke-width="2" stroke-linecap="round"/></svg>'+
+      '<input class="search-input" id="shelf-search" placeholder="Search passages\u2026" autocomplete="off" />'+
+      '</div>';
+    wrap.appendChild(bar);
+
+    var q=state.searchQuery.toLowerCase().trim();
+    var filtered=state.highlights;
+    if(q){
+      filtered=state.highlights.filter(function(h){
+        return h.text.toLowerCase().indexOf(q)!==-1||
+          h.book.toLowerCase().indexOf(q)!==-1||
+          h.author.toLowerCase().indexOf(q)!==-1||
+          h.note.toLowerCase().indexOf(q)!==-1;
+      });
+      var info=document.createElement("div");info.className="search-count";
+      info.textContent=filtered.length+" of "+state.highlights.length+" passages";
+      wrap.appendChild(info);
+    }
+
+    // group by book
+    var groups={};
+    filtered.forEach(function(h){
+      var k=h.book||"Unsorted";(groups[k]=groups[k]||[]).push(h);
+    });
+    Object.keys(groups).forEach(function(book){
+      var items=groups[book];
+      var g=document.createElement("div");g.style.marginBottom="22px";
+      g.innerHTML='<div class="group-head"><span class="group-title">'+esc(book)+
+        '</span><span class="group-count">'+items.length+'</span></div>';
+      items.forEach(function(h){
+        var strip=document.createElement("div");strip.className="strip";
+        strip.innerHTML='';
+        var pEl=document.createElement("p");
+        pEl.innerHTML=q?highlightText(h.text,q):esc(h.text);
+        strip.appendChild(pEl);
+        // note + tags display or editor
+        var noteWrap=document.createElement("div");
+        noteWrap.className="note-wrap";
+        function showNoteAndTags(){
+          noteWrap.innerHTML="";
+          if(h.note){
+            var nd=document.createElement("div");
+            nd.style.cssText="margin-top:8px;font-size:12px;line-height:1.45;color:var(--inkSoft);font-style:italic;border-left:2px solid var(--rule);padding-left:9px;";
+            nd.textContent=h.note;
+            noteWrap.appendChild(nd);
+          }
+          var htags=getAllTags(h);
+          if(htags.length){
+            var td=document.createElement("div");td.className="tags-display";
+            htags.forEach(function(t){
+              var c=document.createElement("span");c.className="tag-chip";c.textContent="#"+t;
+              td.appendChild(c);
+            });
+            noteWrap.appendChild(td);
+          }
+        }
+        showNoteAndTags();
+        strip.appendChild(noteWrap);
+        // footer with edit + remove
+        var foot=document.createElement("div");foot.className="strip-foot";
+        foot.innerHTML='<span class="strip-author">'+esc(h.author||"")+
+          (h.deprioritized?'<span class="deprio-badge">low priority</span>':'')+'</span>';
+        var btnGroup=document.createElement("span");
+        var editBtn=document.createElement("button");
+        editBtn.className="edit-btn btn-press";
+        editBtn.textContent=(h.note||(h.tags&&h.tags.length))?"Edit":"Add note / tags";
+        editBtn.addEventListener("click",(function(hRef,nw,eb){return function(){
+          nw.innerHTML="";
+          // note textarea
+          var lbl1=document.createElement("label");lbl1.textContent="Note";lbl1.style.cssText="font-size:11px;color:var(--inkSoft);margin:4px 0 3px;display:block;";
+          nw.appendChild(lbl1);
+          var ta=document.createElement("textarea");ta.className="note-edit";ta.rows=2;
+          ta.value=hRef.note||"";ta.placeholder="Why this stuck with you\u2026";
+          nw.appendChild(ta);
+          // tag editor
+          var lbl2=document.createElement("label");lbl2.textContent="Tags";lbl2.style.cssText="font-size:11px;color:var(--inkSoft);margin:6px 0 3px;display:block;";
+          nw.appendChild(lbl2);
+          var editTags=(hRef.tags||[]).slice();
+          var tw=document.createElement("div");tw.className="tag-input-wrap";
+          var tinp=document.createElement("input");tinp.placeholder="Type and press Enter\u2026";
+          tw.appendChild(tinp);nw.appendChild(tw);
+          function renderET(){
+            var old=tw.querySelectorAll(".tag-rm");
+            Array.prototype.forEach.call(old,function(o){o.remove();});
+            editTags.forEach(function(t,i){
+              var chip=document.createElement("button");chip.className="tag-rm";
+              chip.innerHTML=esc(t)+'<span class="x">&times;</span>';
+              chip.addEventListener("click",function(){editTags.splice(i,1);renderET();});
+              tw.insertBefore(chip,tinp);
+            });
+          }
+          renderET();
+          tinp.addEventListener("keydown",function(e){
+            if(e.key==="Enter"||e.key===","){
+              e.preventDefault();
+              var v=tinp.value.replace(/^#/,"").replace(/[^A-Za-z0-9_]/g,"").trim();
+              if(v&&editTags.indexOf(v)===-1){editTags.push(v);renderET();}
+              tinp.value="";
+            }
+            if(e.key==="Backspace"&&!tinp.value&&editTags.length){editTags.pop();renderET();}
+          });
+          // actions
+          var acts=document.createElement("div");acts.className="note-actions";
+          var sv=document.createElement("button");sv.className="note-save btn-press";sv.textContent="Save";
+          var cn=document.createElement("button");cn.className="note-cancel btn-press";cn.textContent="Cancel";
+          cn.addEventListener("click",function(){showNoteAndTags();eb.textContent=(hRef.note||(hRef.tags&&hRef.tags.length))?"Edit":"Add note / tags";});
+          sv.addEventListener("click",function(){
+            hRef.note=ta.value.trim();hRef.tags=editTags.slice();
+            hRef.updatedAt=Date.now();
+            save();showNoteAndTags();
+            eb.textContent=(hRef.note||(hRef.tags&&hRef.tags.length))?"Edit":"Add note / tags";
+          });
+          acts.appendChild(cn);acts.appendChild(sv);nw.appendChild(acts);
+          ta.focus();
+        };})(h,noteWrap,editBtn));
+        btnGroup.appendChild(editBtn);
+        var rm=document.createElement("button");
+        rm.className="remove btn-press";rm.textContent="Remove";
+        rm.addEventListener("click",function(){remove(h.id);});
+        btnGroup.appendChild(rm);
+        foot.appendChild(btnGroup);
+        strip.appendChild(foot);
+        g.appendChild(strip);
+      });
+      wrap.appendChild(g);
+    });
+    wrap.appendChild(backupBlock());
+
+    // wire search
+    setTimeout(function(){
+      var inp=document.getElementById("shelf-search");
+      if(!inp)return;
+      inp.value=state.searchQuery;
+      // add clear button if has query
+      if(state.searchQuery){
+        var cl=document.createElement("button");cl.className="search-clear";cl.innerHTML="&times;";
+        cl.addEventListener("click",function(){state.searchQuery="";render();});
+        inp.parentNode.appendChild(cl);
+      }
+      inp.addEventListener("input",function(){
+        state.searchQuery=inp.value;
+        var pos=inp.selectionStart;
+        clearTimeout(inp._t);
+        inp._t=setTimeout(function(){
+          render();
+          var el=document.getElementById("shelf-search");
+          if(el){el.focus();el.selectionStart=el.selectionEnd=pos;}
+        },200);
+      });
+    },0);
+
+    return wrap;
+  }
+
+  function backupBlock(){
+    var d=document.createElement("div");d.className="backup";
+    d.innerHTML='<div class="backup-label">Export backs up your shelf to a file. Import accepts backups, Goodreads/Kindle notes pages (.html), My Clippings.txt, or PDFs.</div>';
+    var row=document.createElement("div");row.className="backup-row";
+    var ex=document.createElement("button");ex.className="backup-btn";ex.textContent="Export";
+    ex.addEventListener("click",exportData);
+    var im=document.createElement("button");im.className="backup-btn";im.textContent="Import";
+    im.addEventListener("click",function(){document.getElementById("import-file").click();});
+    row.appendChild(ex);row.appendChild(im);d.appendChild(row);
+    return d;
+  }
+
+  function renderAdd(){
+    var wrap=document.createElement("div");wrap.className="scroll";
+    var f=document.createElement("div");f.className="form";
+    f.innerHTML=
+      '<label>The passage</label>'+
+      '<textarea id="f-text" rows="5" placeholder="A line or paragraph you want to meet again\u2026"></textarea>'+
+      '<label>Book</label><input id="f-book" placeholder="Title" />'+
+      '<label>Author</label><input id="f-author" placeholder="Optional" />'+
+      '<label>Your note</label><input id="f-note" placeholder="Why it stuck with you \u2014 optional" />'+
+      '<label>Tags</label>'+
+      '<div class="tag-input-wrap" id="f-tags-wrap"><input id="f-tag-input" placeholder="Type and press Enter\u2026" /></div>'+
+      '<button class="save btn-press" id="f-save" disabled>Save to shelf</button>';
+    wrap.appendChild(f);
+
+    var t=f.querySelector("#f-text"),b=f.querySelector("#f-book"),
+        a=f.querySelector("#f-author"),n=f.querySelector("#f-note"),
+        sv=f.querySelector("#f-save"),tw=f.querySelector("#f-tags-wrap"),
+        ti=f.querySelector("#f-tag-input");
+    t.value=state.form.text;b.value=state.form.book;a.value=state.form.author;n.value=state.form.note;
+
+    function renderFormTags(){
+      var chips=tw.querySelectorAll(".tag-rm");
+      Array.prototype.forEach.call(chips,function(c){c.remove();});
+      state.form.tags.forEach(function(tag,idx){
+        var chip=document.createElement("button");chip.className="tag-rm";
+        chip.innerHTML=esc(tag)+'<span class="x">&times;</span>';
+        chip.addEventListener("click",function(){
+          state.form.tags.splice(idx,1);renderFormTags();
+        });
+        tw.insertBefore(chip,ti);
+      });
+    }
+    renderFormTags();
+
+    ti.addEventListener("keydown",function(e){
+      if(e.key==="Enter"||e.key===","){
+        e.preventDefault();
+        var v=ti.value.replace(/^#/,"").replace(/[^A-Za-z0-9_]/g,"").trim();
+        if(v&&state.form.tags.indexOf(v)===-1){state.form.tags.push(v);renderFormTags();}
+        ti.value="";
+      }
+      if(e.key==="Backspace"&&!ti.value&&state.form.tags.length){
+        state.form.tags.pop();renderFormTags();
+      }
+    });
+
+    function sync(){
+      state.form.text=t.value;state.form.book=b.value;state.form.author=a.value;state.form.note=n.value;
+      sv.disabled=!t.value.trim();
+    }
+    [t,b,a,n].forEach(function(el){el.addEventListener("input",sync);});
+    sync();
+    sv.addEventListener("click",function(){addHighlight();});
+    return wrap;
+  }
+
+  function addHighlight(){
+    var text=state.form.text.trim();if(!text)return;
+    var now=Date.now();
+    var h={id:uid(),text:text,book:state.form.book.trim(),
+      author:state.form.author.trim(),note:state.form.note.trim(),
+      tags:state.form.tags.slice(),createdAt:now,updatedAt:now};
+    state.highlights.unshift(h);save();
+    state.form={text:"",book:"",author:"",note:"",tags:[]};
+    state.lastId=h.id;state.currentId=h.id;state.view="review";render();
+  }
+
+  function remove(id){
+    state.highlights=state.highlights.filter(function(h){return h.id!==id;});
+    try{localStorage.setItem(KEY,JSON.stringify({highlights:state.highlights,seeded:true}));}catch(e){}
+    syncUp([],[id]).catch(function(){});
+    if(state.currentId===id){state.lastId=null;state.currentId=null;}
+    render();
+  }
+
+  function emptyState(){
+    var d=document.createElement("div");d.className="empty";
+    d.innerHTML='<div class="h">Your shelf is empty</div>'+
+      '<p>Add a passage worth returning to. When you have a quiet minute, come back and the room will hand you one at random.</p>';
+    var b=document.createElement("button");b.className="cta btn-press";b.textContent="Add your first";
+    b.addEventListener("click",function(){state.view="add";render();});
+    d.appendChild(b);
+    var imp=document.createElement("button");
+    imp.className="cta btn-press";imp.textContent="Import a backup";
+    imp.style.marginLeft="8px";
+    imp.addEventListener("click",function(){document.getElementById("import-file").click();});
+    d.appendChild(imp);
+    return d;
+  }
+
+  function renderNav(){
+    var nav=document.getElementById("nav");nav.innerHTML="";
+    var items=[
+      {key:"review",label:"Review",icon:lampIcon},
+      {key:"library",label:"Shelf",icon:shelfIcon},
+      {key:"add",label:"Add",icon:plusIcon},
+      {key:"settings",label:"Sync",icon:gearIcon}
+    ];
+    items.forEach(function(it){
+      var b=document.createElement("button");
+      var isActive=state.view===it.key;
+      b.className="nav-btn btn-press"+((isActive)?" active":"");
+      // show error dot on sync tab if error
+      var extra=(it.key==="settings"&&syncStatus==="error")?' <span style="color:#d06060;font-size:9px;">!</span>':"";
+      b.innerHTML=it.icon(isActive)+'<span>'+it.label+extra+'</span>';
+      b.addEventListener("click",function(){state.view=it.key;render();});
+      nav.appendChild(b);
+    });
+  }
+
+  function gearIcon(active){var c=active?"var(--lamp)":"var(--chromeDim)";
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">'+
+      '<circle cx="12" cy="12" r="3" stroke="'+c+'" stroke-width="1.6"/>'+
+      '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="'+c+'" stroke-width="1.6"/></svg>';}
+
+  function renderSettings(){
+    var wrap=document.createElement("div");wrap.className="settings";
+    var s=document.createElement("div");s.className="settings-section";
+    var enabled=settings.enabled&&settings.url&&settings.key;
+
+    s.innerHTML=
+      '<h3>Cloud Sync</h3>'+
+      '<p>One-time setup. Your highlights will sync automatically between any device using the same credentials.</p>'+
+      '<p>1. Sign up free at <a href="https://supabase.com" target="_blank">supabase.com</a> &rarr; New project.<br>'+
+      '2. Go to <b>SQL Editor</b> and run the setup SQL below.<br>'+
+      '3. Go to <b>Project Settings &rarr; API</b> and copy the Project URL and anon key here.</p>';
+
+    // SQL block
+    var sqlWrap=document.createElement("div");
+    sqlWrap.style.cssText="background:rgba(0,0,0,0.35);border-radius:6px;padding:12px 14px;margin-bottom:14px;position:relative;";
+    var sqlText='create table if not exists highlights (\n'+
+      '  id text primary key,\n'+
+      '  shelf_id text not null,\n'+
+      '  text text not null default \'\',\n'+
+      '  book text not null default \'\',\n'+
+      '  author text not null default \'\',\n'+
+      '  note text not null default \'\',\n'+
+      '  tags text not null default \'[]\',\n'+
+      '  created_at bigint default 0,\n'+
+      '  updated_at bigint default 0,\n'+
+      '  deleted boolean default false\n'+
+      ');\ncreate index if not exists highlights_shelf\n'+
+      '  on highlights(shelf_id);';
+    var sqlEl=document.createElement("pre");
+    sqlEl.style.cssText="font-size:11px;color:var(--chrome);margin:0;white-space:pre-wrap;word-break:break-all;padding-right:48px;";
+    sqlEl.textContent=sqlText;
+    var copySql=document.createElement("button");
+    copySql.className="copy-btn btn-press";
+    copySql.style.cssText="position:absolute;top:10px;right:10px;padding:4px 10px;font-size:11px;";
+    copySql.textContent="Copy";
+    copySql.addEventListener("click",function(){
+      navigator.clipboard.writeText(sqlText).then(function(){copySql.textContent="Copied!";setTimeout(function(){copySql.textContent="Copy";},1800);});
+    });
+    sqlWrap.appendChild(sqlEl);sqlWrap.appendChild(copySql);
+    s.appendChild(sqlWrap);
+
+    // URL field
+    var r1=document.createElement("div");r1.className="settings-row";
+    r1.innerHTML='<label>Supabase Project URL</label>';
+    var urlInp=document.createElement("input");urlInp.type="url";
+    urlInp.placeholder="https://xxxx.supabase.co";urlInp.value=settings.url;
+    r1.appendChild(urlInp);s.appendChild(r1);
+
+    // Key field
+    var r2=document.createElement("div");r2.className="settings-row";
+    r2.innerHTML='<label>Supabase Anon Key</label>';
+    var keyInp=document.createElement("input");keyInp.type="password";
+    keyInp.placeholder="eyJ…";keyInp.value=settings.key;
+    r2.appendChild(keyInp);s.appendChild(r2);
+
+    // Sync key
+    var r3=document.createElement("div");r3.className="settings-row";
+    r3.innerHTML='<label>Your Sync Key <span style="color:var(--chromeDim);font-size:11px;">(must match on every device)</span></label>';
+    var skRow=document.createElement("div");skRow.className="sync-key-row";
+    var skInp=document.createElement("input");skInp.type="text";
+    skInp.value=settings.shelfId;skInp.placeholder="auto-generated";
+    var skCopy=document.createElement("button");skCopy.className="copy-btn btn-press";skCopy.textContent="Copy";
+    skCopy.addEventListener("click",function(){
+      navigator.clipboard.writeText(skInp.value).then(function(){skCopy.textContent="Copied!";setTimeout(function(){skCopy.textContent="Copy";},1800);});
+    });
+    skRow.appendChild(skInp);skRow.appendChild(skCopy);
+    r3.appendChild(skRow);
+
+    // Magic link — pre-fills everything on the other device
+    var mlBtn=document.createElement("button");mlBtn.className="sync-now-btn btn-press";
+    mlBtn.style.marginTop="8px";mlBtn.textContent="📋 Copy setup link for other device";
+    mlBtn.addEventListener("click",function(){
+      var u=urlInp.value.trim()||settings.url;
+      var k=keyInp.value.trim()||settings.key;
+      var sk=skInp.value.trim()||settings.shelfId;
+      if(!u||!k){toast("Save your credentials first");return;}
+      var link=location.origin+location.pathname+
+        "?sb_url="+encodeURIComponent(u)+
+        "&sb_key="+encodeURIComponent(k)+
+        "&shelf_id="+encodeURIComponent(sk);
+      navigator.clipboard.writeText(link).then(function(){
+        toast("Link copied! Open it on your other device.");
+        mlBtn.textContent="✓ Link copied!";
+        setTimeout(function(){mlBtn.textContent="📋 Copy setup link for other device";},2500);
+      }).catch(function(){
+        // fallback: show the link in a prompt
+        window.prompt("Copy this link and open it on your other device:",link);
+      });
+    });
+    r3.appendChild(mlBtn);
+    s.appendChild(r3);
+
+    // Save button
+    var saveBtn=document.createElement("button");saveBtn.className="settings-save btn-press";saveBtn.textContent="Save & Connect";
+    saveBtn.addEventListener("click",function(){
+      var u=urlInp.value.trim(),k=keyInp.value.trim(),sk=skInp.value.trim()||uid();
+      if(!u||!k){toast("Enter both URL and key");return;}
+      settings={url:u,key:k,shelfId:sk,enabled:true};
+      saveSettings(settings);
+      toast("Saved! Syncing now…");
+      syncNow().then(function(){render();});
+    });
+    s.appendChild(saveBtn);
+
+    // Status line
+    var statusLine=document.createElement("div");statusLine.className="sync-status-line";
+    if(enabled){
+      var dot=syncStatus==="ok"?"🟢":syncStatus==="syncing"?"🟡":syncStatus==="error"?"🔴":"⚪";
+      statusLine.textContent=dot+" "+(syncMsg||(syncStatus==="ok"?"All synced":syncStatus==="error"?"Error — check credentials":"Idle"));
+    }else{
+      statusLine.textContent="Not connected yet";
+    }
+    s.appendChild(statusLine);
+
+    if(enabled){
+      var syncBtn=document.createElement("button");syncBtn.className="sync-now-btn btn-press";
+      syncBtn.textContent="Sync now";
+      syncBtn.addEventListener("click",function(){
+        syncBtn.textContent="Syncing…";syncBtn.disabled=true;
+        syncNow().then(function(){render();});
+      });
+      s.appendChild(syncBtn);
+
+      var hr=document.createElement("hr");hr.className="divider";s.appendChild(hr);
+      var dis=document.createElement("button");dis.className="sync-now-btn btn-press";
+      dis.style.color="var(--chromeDim)";dis.textContent="Disconnect sync";
+      dis.addEventListener("click",function(){
+        settings.enabled=false;saveSettings(settings);
+        setSyncStatus("idle","");toast("Sync disconnected");render();
+      });
+      s.appendChild(dis);
+    }
+
+    wrap.appendChild(s);
+    return wrap;
+  }
+
+  function lampIcon(active){var c=active?"var(--lamp)":"var(--chromeDim)";
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">'+
+      '<path d="M8 3h8l3 7H5l3-7z" stroke="'+c+'" stroke-width="1.6" stroke-linejoin="round"/>'+
+      '<path d="M12 10v8" stroke="'+c+'" stroke-width="1.6"/>'+
+      '<path d="M8 21h8" stroke="'+c+'" stroke-width="1.6" stroke-linecap="round"/>'+
+      (active?'<ellipse cx="12" cy="10" rx="7" ry="1.4" fill="'+lampGlow+'"/>':'')+'</svg>';}
+  function shelfIcon(active){var c=active?"var(--lamp)":"var(--chromeDim)";
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">'+
+      '<rect x="4" y="4" width="3.5" height="16" stroke="'+c+'" stroke-width="1.6"/>'+
+      '<rect x="9" y="4" width="3.5" height="16" stroke="'+c+'" stroke-width="1.6"/>'+
+      '<path d="M15 5.5l4 1-3.2 14.5-4-1L15 5.5z" stroke="'+c+'" stroke-width="1.6" stroke-linejoin="round"/></svg>';}
+  function plusIcon(active){var c=active?"var(--lamp)":"var(--chromeDim)";
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">'+
+      '<circle cx="12" cy="12" r="9" stroke="'+c+'" stroke-width="1.6"/>'+
+      '<path d="M12 8v8M8 12h8" stroke="'+c+'" stroke-width="1.6" stroke-linecap="round"/></svg>';}
+
+  function toast(msg){
+    var t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");
+    clearTimeout(t._timer);t._timer=setTimeout(function(){t.classList.remove("show");},2600);
+  }
+
+  function exportData(){
+    var payload={app:"reading-room",version:1,exportedAt:new Date().toISOString(),
+      highlights:state.highlights};
+    var blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    var stamp=new Date().toISOString().slice(0,10);
+    a.href=url;a.download="reading-room-"+stamp+".json";
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},100);
+    toast("Exported "+state.highlights.length+" passage"+(state.highlights.length===1?"":"s"));
+  }
+
+  function importData(file){
+    var name=(file.name||"").toLowerCase();
+    if(name.slice(-5)===".json"||file.type==="application/json"){readAs(file,importJson);}
+    else if(name.slice(-5)===".html"||name.slice(-4)===".htm"||file.type==="text/html"){readAs(file,importHtml);}
+    else if(name.slice(-4)===".pdf"||file.type==="application/pdf"){importPdf(file);}
+    else{readAs(file,importText);}
+  }
+  function readAs(file,fn){
+    var r=new FileReader();
+    r.onload=function(){fn(r.result);};
+    r.onerror=function(){toast("Couldn't read that file");};
+    r.readAsText(file);
+  }
+  function clean(s){return (s||"").replace(/\s+/g," ").trim();}
+  function highlightText(text,query){
+    var escaped=esc(text);
+    var qEsc=query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return escaped.replace(new RegExp('('+qEsc+')','gi'),'<span class="highlight-match">$1</span>');
+  }
+
+  function importJson(raw){
+    try{
+      var data=JSON.parse(raw);
+      var incoming=Array.isArray(data)?data:(data&&data.highlights);
+      if(!Array.isArray(incoming))throw new Error("bad format");
+      // route through startReview so user gets merge/replace choice
+      var items=incoming.filter(function(h){return h&&typeof h.text==="string"&&h.text.trim();})
+        .map(function(h){
+          return {text:h.text,book:h.book||"",author:h.author||"",
+            note:h.note||"",tags:Array.isArray(h.tags)?h.tags:[],checked:true};
+        });
+      startReview("","",items);
+    }catch(e){
+      toast("That file isn't a valid backup");
+    }
+  }
+
+  function importHtml(raw){
+    var doc;
+    try{doc=new DOMParser().parseFromString(raw,"text/html");}
+    catch(e){toast("Couldn't read that page");return;}
+    var items=[],book="",author="";
+
+    // Goodreads "Kindle Notes & Highlights" page
+    var blocks=doc.querySelectorAll(".noteHighlightContainer");
+    if(blocks.length){
+      blocks.forEach(function(b){
+        var t=b.querySelector(".noteHighlightTextContainer__highlightText");
+        var n=b.querySelector(".js-noteText");
+        var txt=clean(t&&t.textContent);
+        if(txt)items.push({text:txt,note:clean(n&&n.textContent)});
+      });
+      var title=doc.querySelector("title");
+      var m=/Notes\s*&\s*Highlights for (.+?)\s*\|/.exec(clean(title&&title.textContent));
+      if(m)book=m[1];
+      var ael=doc.querySelector("a.authorName, .annotatedBookItem__bookAuthor");
+      if(ael)author=clean(ael.textContent);
+    }else{
+      // generic HTML: blockquotes first, then substantial paragraphs/list items
+      var els=doc.querySelectorAll("blockquote");
+      if(!els.length)els=doc.querySelectorAll("p, li");
+      var seen={};
+      Array.prototype.forEach.call(els,function(el){
+        var txt=clean(el.textContent);
+        if(txt.length<30||txt.length>2000)return;
+        var k=txt.toLowerCase();
+        if(seen[k])return;seen[k]=true;
+        items.push({text:txt,note:""});
+      });
+      items=items.slice(0,400);
+      var t2=doc.querySelector("title");
+      if(t2)book=clean(t2.textContent).split("|")[0].trim().slice(0,120);
+    }
+    startReview(book,author,items);
+  }
+
+  function importText(raw){
+    var items=[];
+    if(raw.indexOf("==========")!==-1){
+      // Kindle "My Clippings.txt"
+      raw.split(/^=+\s*$/m).forEach(function(block){
+        var lines=block.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+        if(lines.length<3)return;
+        var head=lines[0],ib="",ia="";
+        var hm=/^(.*)\(([^()]+)\)\s*$/.exec(head);
+        if(hm){ib=hm[1].trim();ia=hm[2].trim();}else{ib=head;}
+        if(!/highlight|note/i.test(lines[1]))return;
+        var txt=clean(lines.slice(2).join(" "));
+        if(txt)items.push({text:txt,note:"",book:ib,author:ia});
+      });
+      startReview("","",items);
+    }else{
+      raw.split(/\n\s*\n/).forEach(function(p){
+        var txt=clean(p);
+        if(txt.length>=30&&txt.length<=2000)items.push({text:txt,note:""});
+      });
+      startReview("","",items.slice(0,400));
+    }
+  }
+
+  var PDFJS_URL="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+  var PDFJS_WORKER="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  function importPdf(file){
+    toast("Reading PDF\u2026");
+    ensurePdfJs(function(ok){
+      if(!ok){toast("PDF import needs an internet connection");return;}
+      var r=new FileReader();
+      r.onload=function(){
+        window.pdfjsLib.getDocument({data:r.result}).promise.then(function(pdf){
+          var pages=[],chain=Promise.resolve();
+          for(let i=1;i<=pdf.numPages;i++){
+            chain=chain.then(function(){return pdf.getPage(i).then(function(pg){
+              return pg.getTextContent().then(function(tc){
+                var s="";
+                tc.items.forEach(function(it){s+=it.str+(it.hasEOL?"\n":" ");});
+                pages.push(s);
+              });
+            });});
+          }
+          chain.then(function(){
+            var text=pages.join("\n\n");
+            var parts=text.split(/\n\s*\n/);
+            if(parts.length<3)parts=text.split(/(?:[.?!]["\u201D]?)\s*\n/);
+            var items=[];
+            parts.forEach(function(p){
+              var txt=clean(p);
+              if(txt.length>=40&&txt.length<=2000)items.push({text:txt,note:""});
+            });
+            startReview("","",items.slice(0,300));
+          });
+        }).catch(function(){toast("Couldn't read that PDF");});
+      };
+      r.onerror=function(){toast("Couldn't read that file");};
+      r.readAsArrayBuffer(file);
+    });
+  }
+  function ensurePdfJs(cb){
+    if(window.pdfjsLib){cb(true);return;}
+    var s=document.createElement("script");
+    s.src=PDFJS_URL;
+    s.onload=function(){
+      try{window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;}catch(e){}
+      cb(true);
+    };
+    s.onerror=function(){cb(false);};
+    document.head.appendChild(s);
+  }
+
+  function startReview(book,author,items){
+    if(!items.length){toast("No passages found in that file");return;}
+    state.pending={book:book||"",author:author||"",
+      items:items.map(function(it){return {text:it.text,note:it.note||"",
+        book:it.book||"",author:it.author||"",checked:true};})};
+    state.view="importReview";render();
+  }
+
+  function renderImportReview(){
+    var wrap=document.createElement("div");wrap.className="scroll";
+    var p=state.pending;
+    var n=p.items.length;
+
+    var head=document.createElement("div");head.className="imp-head";
+    head.innerHTML='<div class="imp-title">Found '+n+' passage'+(n===1?'':'s')+'</div>';
+
+    // Replace vs Merge toggle
+    var modeWrap=document.createElement("div");
+    modeWrap.style.cssText="display:flex;gap:0;border:1px solid rgba(255,255,255,0.12);border-radius:999px;overflow:hidden;margin-bottom:12px;";
+    var btnMerge=document.createElement("button");
+    var btnReplace=document.createElement("button");
+    var modeReplace=false;
+    function styleMode(){
+      var activeStyle="background:var(--lamp);color:#211a0e;border:none;padding:8px 18px;font-size:13px;cursor:pointer;flex:1;font-weight:600;";
+      var idleStyle="background:transparent;color:var(--chrome);border:none;padding:8px 18px;font-size:13px;cursor:pointer;flex:1;";
+      btnMerge.style.cssText=modeReplace?idleStyle:activeStyle;
+      btnReplace.style.cssText=modeReplace?activeStyle:idleStyle;
+    }
+    btnMerge.textContent="Merge";btnReplace.textContent="Replace shelf";
+    btnMerge.addEventListener("click",function(){modeReplace=false;styleMode();updateGo();});
+    btnReplace.addEventListener("click",function(){modeReplace=true;styleMode();updateGo();});
+    modeWrap.appendChild(btnMerge);modeWrap.appendChild(btnReplace);
+    styleMode();
+    head.appendChild(modeWrap);
+
+    // Replace warning
+    var warning=document.createElement("div");
+    warning.style.cssText="font-size:12px;color:#d06060;margin-bottom:10px;display:none;";
+    warning.textContent="⚠ Replace will clear your entire shelf and import only what's selected below.";
+    head.appendChild(warning);
+    btnReplace.addEventListener("click",function(){warning.style.display="block";});
+    btnMerge.addEventListener("click",function(){warning.style.display="none";});
+
+    var perItemMeta=p.items.some(function(it){return it.book;});
+    if(!perItemMeta){
+      var fields=document.createElement("div");fields.className="imp-fields";
+      fields.innerHTML='<input id="imp-book" placeholder="Book" /><input id="imp-author" placeholder="Author" />';
+      head.appendChild(fields);
+    }
+    wrap.appendChild(head);
+
+    p.items.forEach(function(it){
+      var row=document.createElement("div");row.className="imp-item";
+      var cb=document.createElement("input");cb.type="checkbox";cb.checked=it.checked;
+      cb.addEventListener("change",function(){it.checked=cb.checked;updateGo();});
+      var body=document.createElement("div");
+      body.innerHTML='<div class="t">'+esc(it.text)+'</div>'+
+        (it.book?'<div class="b">'+esc(it.book)+(it.author?' \u2014 '+esc(it.author):'')+'</div>':'')+
+        (it.note?'<div class="b">Note: '+esc(it.note)+'</div>':'');
+      row.appendChild(cb);row.appendChild(body);
+      wrap.appendChild(row);
+    });
+
+    var actions=document.createElement("div");actions.className="imp-actions";
+    var cancel=document.createElement("button");cancel.className="imp-cancel btn-press";cancel.textContent="Cancel";
+    cancel.addEventListener("click",function(){state.pending=null;state.view="library";render();});
+    var go=document.createElement("button");go.className="imp-go btn-press";
+    go.addEventListener("click",function(){finishImport(modeReplace);});
+    actions.appendChild(cancel);actions.appendChild(go);
+    wrap.appendChild(actions);
+
+    function updateGo(){
+      var c=p.items.filter(function(i){return i.checked;}).length;
+      go.textContent=(modeReplace?"Replace with ":"Import ")+ c+" selected";
+      go.disabled=c===0;
+    }
+    updateGo();
+
+    if(p.book){setTimeout(function(){
+      var bk=wrap.querySelector("#imp-book"),au=wrap.querySelector("#imp-author");
+      if(bk)bk.value=p.book;if(au)au.value=p.author||"";
+    },0);}
+    return wrap;
+  }
+
+  function finishImport(replaceMode){
+    var p=state.pending;if(!p)return;
+    var bkEl=document.getElementById("imp-book"),auEl=document.getElementById("imp-author");
+    var gBook=bkEl?bkEl.value.trim():p.book;
+    var gAuthor=auEl?auEl.value.trim():p.author;
+
+    var selected=p.items.filter(function(it){return it.checked;});
+    if(!selected.length){toast("Nothing selected");return;}
+
+    var deletedIds=[];
+    if(replaceMode){
+      // collect IDs for cloud deletion
+      state.highlights.forEach(function(h){deletedIds.push(h.id);});
+      state.highlights=[];
+    }
+
+    var seen={};
+    state.highlights.forEach(function(h){seen[clean(h.text).toLowerCase()]=true;});
+    var added=0,skipped=0;
+    selected.forEach(function(it){
+      var k=clean(it.text).toLowerCase();
+      if(!replaceMode&&seen[k]){skipped++;return;}
+      seen[k]=true;
+      state.highlights.push({id:uid(),text:it.text,
+        book:it.book||gBook||"",author:it.author||gAuthor||"",
+        note:it.note||"",tags:it.tags||[],createdAt:Date.now(),updatedAt:Date.now()});
+      added++;
+    });
+
+    // save locally then sync (deletions + new rows)
+    try{localStorage.setItem(KEY,JSON.stringify({highlights:state.highlights,seeded:true}));}catch(e){}
+    if(deletedIds.length){
+      syncUp(state.highlights,deletedIds).catch(function(){});
+    } else {
+      save();
+    }
+    state.pending=null;state.view="library";render();
+    var msg=replaceMode
+      ?"Replaced shelf with "+added+" passages"
+      :"Imported "+added+(skipped?" ("+skipped+" duplicate"+(skipped===1?"":"s")+" skipped)":"");
+    toast(msg);
+  }
+
+  document.getElementById("import-file").addEventListener("change",function(e){
+    var f=e.target.files&&e.target.files[0];
+    if(f)importData(f);
+    e.target.value="";
+  });
+
+  // keyboard (harmless on phone)
+  document.addEventListener("keydown",function(e){
+    if(state.view!=="review")return;
+    if(e.code==="Space"||e.code==="ArrowRight"){e.preventDefault();next();}
+  });
+
+  // ── Share ──────────────────────────────────────────────────────────
+  function shareApp(){
+    var data={title:"The Reading Room",
+      text:"A free app for revisiting your Kindle and Goodreads highlights — one passage at a time. No subscription, no ads.",
+      url:"https://thereadingroom.app"};
+    if(navigator.share){navigator.share(data).catch(function(){});}
+    else{
+      navigator.clipboard.writeText(data.url+" \u2014 "+data.text)
+        .then(function(){toast("Link copied \u2014 share it with a friend!");})
+        .catch(function(){window.prompt("Share this link:",data.url);});
+    }
+  }
+
+  // ── Onboarding ─────────────────────────────────────────────────────
+  var ONBOARD_KEY="reading_room_onboarded";
+  function showOnboarding(){
+    var el=document.getElementById("onboard");if(!el)return;
+    el.style.display="flex";
+    document.getElementById("onboard-start").addEventListener("click",function(){
+      localStorage.setItem(ONBOARD_KEY,"1");
+      el.style.display="none";
+    });
+  }
+
+  // init
+  var existing=load();
+  if(existing){state.highlights=existing;}
+  else{state.highlights=SEED.slice();save(true);}
+
+  // handle magic link
+  (function(){
+    var p=new URLSearchParams(location.search);
+    var u=p.get("sb_url"),k=p.get("sb_key"),sid=p.get("shelf_id");
+    if(u&&k&&sid){
+      settings={url:u,key:k,shelfId:sid,enabled:true};
+      saveSettings(settings);
+      history.replaceState({},"",location.pathname);
+      toast("Sync configured! Connecting…");
+    }
+  })();
+
+  render();
+
+  // show onboarding for first-time users
+  if(!localStorage.getItem(ONBOARD_KEY)){showOnboarding();}
+
+  if(settings.enabled&&settings.url&&settings.key){
+    syncDown().catch(function(){});
+  }
+
+  // register service worker for offline / installable app (only when hosted)
+  if("serviceWorker" in navigator && location.protocol.indexOf("http")===0){
+    window.addEventListener("load",function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
