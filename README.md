@@ -63,4 +63,4 @@ MIT — free to use, modify, and share.
 
 ---
 
-*Built by a reader, for readers. Free forever.*
+*Built by a reader, for readers. Free*
