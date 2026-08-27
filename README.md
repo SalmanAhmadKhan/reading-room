@@ -37,14 +37,9 @@ The fastest way to fill your shelf:
 3. Open the app → Shelf → Import → select the file
 4. Review and confirm — all your highlights from every book, in one step
 
-## Set up sync (optional)
+## Sync across devices
 
-To sync across phone and laptop:
-
-1. Sign up free at [supabase.com](https://supabase.com) → create a project
-2. Run the setup SQL in Supabase's SQL Editor (shown in the app's Sync tab)
-3. Paste your Project URL and anon key into the app's Sync tab
-4. Use the "Copy setup link" button to configure your other device in one tap
+Create a free account in the app's **Account tab** — sign up with email and password. Your highlights sync automatically between any device you sign into. No Supabase setup required for users.
 
 ## Deploy your own
 

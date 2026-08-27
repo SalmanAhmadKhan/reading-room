@@ -1,4 +1,4 @@
-const CACHE = "reading-room-v10";
+const CACHE = "reading-room-v11";
 const ASSETS = ["./app.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {

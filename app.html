@@ -232,7 +232,7 @@
   <header>
     <div>
       <div class="title">The Reading Room</div>
-      <div class="subtitle">passages worth returning to &middot; v10 <span id="sync-dot" title="Sync status"></span></div>
+      <div class="subtitle">passages worth returning to &middot; v11 <span id="sync-dot" title="Sync status"></span></div>
     </div>
     <div class="count" id="count">0 saved</div>
   </header>
@@ -257,8 +257,11 @@
 (function(){
   "use strict";
   var KEY="reading_room_v1";
+  var AUTH_KEY="reading_room_auth_v1";
   var SETTINGS_KEY="reading_room_settings_v1";
   var lampGlow="rgba(230,164,80,0.22)";
+  var SUPABASE_URL="https://yrkxfhekwpiodszjjvzp.supabase.co";
+  var SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlya3hmaGVrd3Bpb2RzempqdnpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMDIwMDAsImV4cCI6MjA5Njg3ODAwMH0.twGOy-YPAdQ9U-qa7xZU_isk0uY9tmQUiITCCV1P8jE";
 
   var SEED=[{
     id:uid(),
@@ -276,18 +279,12 @@
       :Date.now().toString(36)+Math.random().toString(36).slice(2);
   }
 
-  // ── settings & sync state ──────────────────────────────────────────
-  var syncStatus="idle"; // idle | syncing | ok | error
-  var syncMsg="";
-
-  function loadSettings(){
-    try{var r=localStorage.getItem(SETTINGS_KEY);if(r)return JSON.parse(r);}catch(e){}
-    return null;
-  }
-  function saveSettings(s){
-    try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(s));}catch(e){}
-  }
-  var settings=loadSettings()||{url:"",key:"",shelfId:uid(),enabled:false};
+  // ── Auth state ────────────────────────────────────────────────────
+  var syncStatus="idle";var syncMsg="";
+  function loadAuth(){try{var r=localStorage.getItem(AUTH_KEY);if(r)return JSON.parse(r);}catch(e){}return null;}
+  function saveAuth(a){try{localStorage.setItem(AUTH_KEY,JSON.stringify(a));}catch(e){}}
+  var auth=loadAuth()||{userId:null,accessToken:null,refreshToken:null,email:null};
+  var settings={}; // legacy compat
 
   function setSyncStatus(s,msg){
     syncStatus=s;syncMsg=msg||"";
@@ -295,12 +292,57 @@
     if(dot){dot.className=s==="idle"?"":s;dot.title=msg||"";}
   }
 
-  // ── Supabase REST helpers ──────────────────────────────────────────
+  // ── Supabase REST helpers ─────────────────────────────────────────
   function sbHeaders(){
-    return {"apikey":settings.key,"Authorization":"Bearer "+settings.key,
+    var token=auth.accessToken||SUPABASE_KEY;
+    return{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+token,
       "Content-Type":"application/json","Prefer":"resolution=merge-duplicates"};
   }
-  function sbUrl(path){return settings.url.replace(/\/+$/,"")+"/rest/v1/"+path;}
+  function sbUrl(path){return SUPABASE_URL+"/rest/v1/"+path;}
+  function authApiUrl(path){return SUPABASE_URL+"/auth/v1/"+path;}
+
+  async function sbFetch(path,opts){
+    var r=await fetch(sbUrl(path),Object.assign({headers:sbHeaders()},opts));
+    if(!r.ok){var t=await r.text().catch(function(){return r.status;});throw new Error(t);}
+    return r.json().catch(function(){return null;});
+  }
+
+  // ── Auth API ──────────────────────────────────────────────────────
+  async function authSignUp(email,password){
+    var r=await fetch(authApiUrl("signup"),{method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({email:email,password:password})});
+    return r.json();
+  }
+  async function authSignIn(email,password){
+    var r=await fetch(authApiUrl("token?grant_type=password"),{method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({email:email,password:password})});
+    return r.json();
+  }
+  async function authRefreshToken(rt){
+    var r=await fetch(authApiUrl("token?grant_type=refresh_token"),{method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Content-Type":"application/json"},
+      body:JSON.stringify({refresh_token:rt})});
+    return r.json();
+  }
+  function handleAuthData(data){
+    if(!data||!data.access_token)return false;
+    auth={userId:data.user.id,accessToken:data.access_token,
+      refreshToken:data.refresh_token,email:data.user.email};
+    saveAuth(auth);
+    setTimeout(function(){authRefreshToken(auth.refreshToken).then(function(d){if(d&&d.access_token)handleAuthData(d);});},50*60*1000);
+    return true;
+  }
+  async function refreshSession(){
+    if(!auth.refreshToken)return false;
+    try{var d=await authRefreshToken(auth.refreshToken);if(d&&d.access_token){handleAuthData(d);return true;}}catch(e){}
+    return false;
+  }
+  function logOut(){
+    auth={userId:null,accessToken:null,refreshToken:null,email:null};
+    saveAuth(auth);setSyncStatus("idle","");state.view="account";render();
+  }
 
   async function sbFetch(path,opts){
     var r=await fetch(sbUrl(path),Object.assign({headers:sbHeaders()},opts));
@@ -309,67 +351,54 @@
   }
 
   function toRow(h){
-    return {id:h.id,shelf_id:settings.shelfId,
-      text:h.text||"",book:h.book||"",author:h.author||"",note:h.note||"",
-      tags:JSON.stringify(h.tags||[]),
-      created_at:h.createdAt||Date.now(),
-      updated_at:h.updatedAt||h.createdAt||Date.now(),
-      deleted:false};
+    return{id:h.id,shelf_id:auth.userId,text:h.text||"",book:h.book||"",
+      author:h.author||"",note:h.note||"",tags:JSON.stringify(h.tags||[]),
+      created_at:h.createdAt||Date.now(),updated_at:h.updatedAt||h.createdAt||Date.now(),deleted:false};
   }
   function fromRow(r){
     var tags=[];try{tags=JSON.parse(r.tags||"[]");}catch(e){}
-    return {id:r.id,text:r.text||"",book:r.book||"",author:r.author||"",
+    return{id:r.id,text:r.text||"",book:r.book||"",author:r.author||"",
       note:r.note||"",tags:tags,createdAt:r.created_at,updatedAt:r.updated_at};
   }
 
   async function syncDown(){
-    if(!settings.enabled||!settings.url||!settings.key)return;
+    if(!auth.userId||!auth.accessToken)return;
     setSyncStatus("syncing","Fetching from cloud…");
     try{
-      var rows=await sbFetch("highlights?shelf_id=eq."+encodeURIComponent(settings.shelfId)+"&select=*");
-      if(!Array.isArray(rows)){
-        setSyncStatus("error","Bad response: "+JSON.stringify(rows).slice(0,120));
-        return;
-      }
-      var activeRows=rows.filter(function(r){return !r.deleted;});
+      var rows=await sbFetch("highlights?shelf_id=eq."+encodeURIComponent(auth.userId)+"&select=*");
+      if(!Array.isArray(rows)){setSyncStatus("error","Bad response");return;}
       var localMap={};
       state.highlights.forEach(function(h){localMap[h.id]=h;});
       rows.forEach(function(r){
         if(r.deleted){delete localMap[r.id];return;}
         var loc=localMap[r.id];
-        var remoteNewer=(r.updated_at||0)>(loc?(loc.updatedAt||loc.createdAt||0):0);
-        if(!loc||remoteNewer)localMap[r.id]=fromRow(r);
+        if(!loc||(r.updated_at||0)>(loc.updatedAt||loc.createdAt||0))localMap[r.id]=fromRow(r);
       });
       state.highlights=Object.values(localMap);
-      state.highlights.sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);});
+      state.highlights.sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
       save(true);
-      setSyncStatus("ok","Synced \u2014 "+activeRows.length+" in cloud, "+state.highlights.length+" total");
+      setSyncStatus("ok","Synced \u2014 "+rows.filter(function(r){return!r.deleted;}).length+" in cloud");
       render();
     }catch(e){setSyncStatus("error","Sync failed: "+e.message);}
   }
 
   async function syncUp(highlights,deletedIds){
-    if(!settings.enabled||!settings.url||!settings.key)return;
+    if(!auth.userId||!auth.accessToken)return;
     setSyncStatus("syncing","Saving to cloud…");
     try{
-      if(highlights&&highlights.length){
+      if(highlights&&highlights.length)
         await sbFetch("highlights",{method:"POST",body:JSON.stringify(highlights.map(toRow))});
-      }
-      if(deletedIds&&deletedIds.length){
+      if(deletedIds&&deletedIds.length)
         await Promise.all(deletedIds.map(function(id){
-          return sbFetch("highlights",{method:"POST",
-            body:JSON.stringify([{id:id,shelf_id:settings.shelfId,text:" ",book:"",author:"",note:"",
+          return sbFetch("highlights",{method:"POST",body:JSON.stringify(
+            [{id:id,shelf_id:auth.userId,text:" ",book:"",author:"",note:"",
               tags:"[]",created_at:Date.now(),updated_at:Date.now(),deleted:true}])});
         }));
-      }
       setSyncStatus("ok","Uploaded "+highlights.length+" to cloud");
     }catch(e){setSyncStatus("error","Upload failed: "+e.message);}
   }
 
-  async function syncNow(){
-    await syncDown();
-    if(state.highlights.length)await syncUp(state.highlights,[]);
-  }
+  async function syncNow(){await syncDown();if(state.highlights.length)await syncUp(state.highlights,[]);}
 
   function extractHashtags(s){
     if(!s)return [];
@@ -840,7 +869,7 @@
       {key:"review",label:"Review",icon:lampIcon},
       {key:"library",label:"Shelf",icon:shelfIcon},
       {key:"add",label:"Add",icon:plusIcon},
-      {key:"settings",label:"Sync",icon:gearIcon}
+      {key:"settings",label:"Account",icon:gearIcon}
     ];
     items.forEach(function(it){
       var b=document.createElement("button");
@@ -859,122 +888,27 @@
       '<circle cx="12" cy="12" r="3" stroke="'+c+'" stroke-width="1.6"/>'+
       '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="'+c+'" stroke-width="1.6"/></svg>';}
 
-  function renderSettings(){
+  function renderSettings(){return renderAccount();}
+  function renderAccount(){
     var wrap=document.createElement("div");wrap.className="settings";
     var s=document.createElement("div");s.className="settings-section";
-    var enabled=settings.enabled&&settings.url&&settings.key;
 
-    s.innerHTML=
-      '<h3>Cloud Sync</h3>'+
-      '<p>One-time setup. Your highlights will sync automatically between any device using the same credentials.</p>'+
-      '<p>1. Sign up free at <a href="https://supabase.com" target="_blank">supabase.com</a> &rarr; New project.<br>'+
-      '2. Go to <b>SQL Editor</b> and run the setup SQL below.<br>'+
-      '3. Go to <b>Project Settings &rarr; API</b> and copy the Project URL and anon key here.</p>';
+    if(auth.userId){
+      // ── Logged in ──
+      s.innerHTML='<h3>Account</h3>';
+      var info=document.createElement("div");
+      info.style.cssText="background:rgba(255,255,255,0.05);border-radius:8px;padding:16px;margin-bottom:16px;";
+      info.innerHTML='<div style="font-size:13px;color:var(--chrome);">Signed in as</div>'+
+        '<div style="font-size:15px;color:var(--paper);margin-top:4px;">'+esc(auth.email)+'</div>';
+      s.appendChild(info);
 
-    // SQL block
-    var sqlWrap=document.createElement("div");
-    sqlWrap.style.cssText="background:rgba(0,0,0,0.35);border-radius:6px;padding:12px 14px;margin-bottom:14px;position:relative;";
-    var sqlText='create table if not exists highlights (\n'+
-      '  id text primary key,\n'+
-      '  shelf_id text not null,\n'+
-      '  text text not null default \'\',\n'+
-      '  book text not null default \'\',\n'+
-      '  author text not null default \'\',\n'+
-      '  note text not null default \'\',\n'+
-      '  tags text not null default \'[]\',\n'+
-      '  created_at bigint default 0,\n'+
-      '  updated_at bigint default 0,\n'+
-      '  deleted boolean default false\n'+
-      ');\ncreate index if not exists highlights_shelf\n'+
-      '  on highlights(shelf_id);';
-    var sqlEl=document.createElement("pre");
-    sqlEl.style.cssText="font-size:11px;color:var(--chrome);margin:0;white-space:pre-wrap;word-break:break-all;padding-right:48px;";
-    sqlEl.textContent=sqlText;
-    var copySql=document.createElement("button");
-    copySql.className="copy-btn btn-press";
-    copySql.style.cssText="position:absolute;top:10px;right:10px;padding:4px 10px;font-size:11px;";
-    copySql.textContent="Copy";
-    copySql.addEventListener("click",function(){
-      navigator.clipboard.writeText(sqlText).then(function(){copySql.textContent="Copied!";setTimeout(function(){copySql.textContent="Copy";},1800);});
-    });
-    sqlWrap.appendChild(sqlEl);sqlWrap.appendChild(copySql);
-    s.appendChild(sqlWrap);
-
-    // URL field
-    var r1=document.createElement("div");r1.className="settings-row";
-    r1.innerHTML='<label>Supabase Project URL</label>';
-    var urlInp=document.createElement("input");urlInp.type="url";
-    urlInp.placeholder="https://xxxx.supabase.co";urlInp.value=settings.url;
-    r1.appendChild(urlInp);s.appendChild(r1);
-
-    // Key field
-    var r2=document.createElement("div");r2.className="settings-row";
-    r2.innerHTML='<label>Supabase Anon Key</label>';
-    var keyInp=document.createElement("input");keyInp.type="password";
-    keyInp.placeholder="eyJ…";keyInp.value=settings.key;
-    r2.appendChild(keyInp);s.appendChild(r2);
-
-    // Sync key
-    var r3=document.createElement("div");r3.className="settings-row";
-    r3.innerHTML='<label>Your Sync Key <span style="color:var(--chromeDim);font-size:11px;">(must match on every device)</span></label>';
-    var skRow=document.createElement("div");skRow.className="sync-key-row";
-    var skInp=document.createElement("input");skInp.type="text";
-    skInp.value=settings.shelfId;skInp.placeholder="auto-generated";
-    var skCopy=document.createElement("button");skCopy.className="copy-btn btn-press";skCopy.textContent="Copy";
-    skCopy.addEventListener("click",function(){
-      navigator.clipboard.writeText(skInp.value).then(function(){skCopy.textContent="Copied!";setTimeout(function(){skCopy.textContent="Copy";},1800);});
-    });
-    skRow.appendChild(skInp);skRow.appendChild(skCopy);
-    r3.appendChild(skRow);
-
-    // Magic link — pre-fills everything on the other device
-    var mlBtn=document.createElement("button");mlBtn.className="sync-now-btn btn-press";
-    mlBtn.style.marginTop="8px";mlBtn.textContent="📋 Copy setup link for other device";
-    mlBtn.addEventListener("click",function(){
-      var u=urlInp.value.trim()||settings.url;
-      var k=keyInp.value.trim()||settings.key;
-      var sk=skInp.value.trim()||settings.shelfId;
-      if(!u||!k){toast("Save your credentials first");return;}
-      var link=location.origin+location.pathname+
-        "?sb_url="+encodeURIComponent(u)+
-        "&sb_key="+encodeURIComponent(k)+
-        "&shelf_id="+encodeURIComponent(sk);
-      navigator.clipboard.writeText(link).then(function(){
-        toast("Link copied! Open it on your other device.");
-        mlBtn.textContent="✓ Link copied!";
-        setTimeout(function(){mlBtn.textContent="📋 Copy setup link for other device";},2500);
-      }).catch(function(){
-        // fallback: show the link in a prompt
-        window.prompt("Copy this link and open it on your other device:",link);
-      });
-    });
-    r3.appendChild(mlBtn);
-    s.appendChild(r3);
-
-    // Save button
-    var saveBtn=document.createElement("button");saveBtn.className="settings-save btn-press";saveBtn.textContent="Save & Connect";
-    saveBtn.addEventListener("click",function(){
-      var u=urlInp.value.trim(),k=keyInp.value.trim(),sk=skInp.value.trim()||uid();
-      if(!u||!k){toast("Enter both URL and key");return;}
-      settings={url:u,key:k,shelfId:sk,enabled:true};
-      saveSettings(settings);
-      toast("Saved! Syncing now…");
-      syncNow().then(function(){render();});
-    });
-    s.appendChild(saveBtn);
-
-    // Status line
-    var statusLine=document.createElement("div");statusLine.className="sync-status-line";
-    if(enabled){
       var dot=syncStatus==="ok"?"🟢":syncStatus==="syncing"?"🟡":syncStatus==="error"?"🔴":"⚪";
-      statusLine.textContent=dot+" "+(syncMsg||(syncStatus==="ok"?"All synced":syncStatus==="error"?"Error — check credentials":"Idle"));
-    }else{
-      statusLine.textContent="Not connected yet";
-    }
-    s.appendChild(statusLine);
+      var statusLine=document.createElement("div");statusLine.className="sync-status-line";
+      statusLine.style.marginBottom="12px";
+      statusLine.textContent=dot+" "+(syncMsg||(syncStatus==="ok"?"All synced":"Ready"));
+      s.appendChild(statusLine);
 
-    if(enabled){
-      var syncBtn=document.createElement("button");syncBtn.className="sync-now-btn btn-press";
+      var syncBtn=document.createElement("button");syncBtn.className="settings-save btn-press";
       syncBtn.textContent="Sync now";
       syncBtn.addEventListener("click",function(){
         syncBtn.textContent="Syncing…";syncBtn.disabled=true;
@@ -983,18 +917,86 @@
       s.appendChild(syncBtn);
 
       var hr=document.createElement("hr");hr.className="divider";s.appendChild(hr);
-      var dis=document.createElement("button");dis.className="sync-now-btn btn-press";
-      dis.style.color="var(--chromeDim)";dis.textContent="Disconnect sync";
-      dis.addEventListener("click",function(){
-        settings.enabled=false;saveSettings(settings);
-        setSyncStatus("idle","");toast("Sync disconnected");render();
+      var out=document.createElement("button");out.className="sync-now-btn btn-press";
+      out.style.color="var(--chromeDim)";out.textContent="Sign out";
+      out.addEventListener("click",function(){logOut();});
+      s.appendChild(out);
+
+    } else {
+      // ── Login / Sign up ──
+      s.innerHTML='<h3>Create an account</h3>'+
+        '<p>Sign up to sync your highlights across all your devices automatically. Free, no setup required.</p>';
+
+      // tabs
+      var tabs=document.createElement("div");
+      tabs.style.cssText="display:flex;border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:18px;";
+      var tSignup=document.createElement("button");tSignup.textContent="Sign up";
+      var tLogin=document.createElement("button");tLogin.textContent="Log in";
+      var tabStyle="background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px;font-size:14px;cursor:pointer;margin-bottom:-1px;";
+      var tabActive="border-bottom-color:var(--lamp);color:var(--lamp);";
+      var tabIdle="color:var(--chromeDim);";
+      var isSignup=true;
+      function styleTabs(){
+        tSignup.style.cssText=tabStyle+(isSignup?tabActive:tabIdle);
+        tLogin.style.cssText=tabStyle+(!isSignup?tabActive:tabIdle);
+        descEl.textContent=isSignup?"A confirmation email will be sent to verify your address.":"Welcome back.";
+      }
+      tabs.appendChild(tSignup);tabs.appendChild(tLogin);s.appendChild(tabs);
+
+      var r1=document.createElement("div");r1.className="settings-row";
+      r1.innerHTML='<label>Email</label>';
+      var emailInp=document.createElement("input");emailInp.type="email";emailInp.placeholder="you@example.com";
+      r1.appendChild(emailInp);s.appendChild(r1);
+
+      var r2=document.createElement("div");r2.className="settings-row";
+      r2.innerHTML='<label>Password</label>';
+      var passInp=document.createElement("input");passInp.type="password";passInp.placeholder="At least 6 characters";
+      r2.appendChild(passInp);s.appendChild(r2);
+
+      var descEl=document.createElement("p");descEl.style.cssText="font-size:12px;color:var(--chromeDim);margin-bottom:12px;";
+      s.appendChild(descEl);
+
+      var errEl=document.createElement("div");
+      errEl.style.cssText="font-size:13px;color:#d06060;margin-bottom:10px;min-height:18px;";
+      s.appendChild(errEl);
+
+      var submitBtn=document.createElement("button");submitBtn.className="settings-save btn-press";
+      submitBtn.textContent="Create account";
+      submitBtn.addEventListener("click",async function(){
+        var email=emailInp.value.trim(),pass=passInp.value;
+        if(!email||!pass){errEl.textContent="Please enter email and password.";return;}
+        submitBtn.disabled=true;submitBtn.textContent=isSignup?"Creating account…":"Signing in…";
+        try{
+          var data=isSignup?await authSignUp(email,pass):await authSignIn(email,pass);
+          if(data.error||data.msg){
+            errEl.textContent=data.error_description||data.msg||data.error||"Something went wrong.";
+            submitBtn.disabled=false;submitBtn.textContent=isSignup?"Create account":"Sign in";
+          } else if(isSignup&&!data.access_token){
+            // email confirmation required
+            errEl.style.color="var(--lamp)";
+            errEl.textContent="Check your email to confirm your account, then come back and log in.";
+            isSignup=false;styleTabs();
+            submitBtn.disabled=false;submitBtn.textContent="Sign in";
+          } else if(handleAuthData(data)){
+            toast("Signed in! Syncing your highlights…");
+            syncDown().then(function(){
+              if(!state.highlights.length||state.highlights.length<=1)
+                syncUp(state.highlights,[]);
+            });
+            state.view="account";render();
+          }
+        }catch(e){errEl.textContent="Network error. Try again.";submitBtn.disabled=false;submitBtn.textContent=isSignup?"Create account":"Sign in";}
       });
-      s.appendChild(dis);
+      s.appendChild(submitBtn);
+
+      tSignup.addEventListener("click",function(){isSignup=true;styleTabs();submitBtn.textContent="Create account";errEl.textContent="";});
+      tLogin.addEventListener("click",function(){isSignup=false;styleTabs();submitBtn.textContent="Sign in";errEl.textContent="";});
+      styleTabs();
     }
 
-    wrap.appendChild(s);
-    return wrap;
+    wrap.appendChild(s);return wrap;
   }
+
 
   function lampIcon(active){var c=active?"var(--lamp)":"var(--chromeDim)";
     return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none">'+
@@ -1347,28 +1349,19 @@
   if(existing){state.highlights=existing;}
   else{state.highlights=SEED.slice();save(true);}
 
-  // handle magic link
-  (function(){
-    var p=new URLSearchParams(location.search);
-    var u=p.get("sb_url"),k=p.get("sb_key"),sid=p.get("shelf_id");
-    if(u&&k&&sid){
-      settings={url:u,key:k,shelfId:sid,enabled:true};
-      saveSettings(settings);
-      history.replaceState({},"",location.pathname);
-      toast("Sync configured! Connecting…");
-    }
-  })();
-
   render();
 
-  // show onboarding for first-time users
-  if(!localStorage.getItem(ONBOARD_KEY)){showOnboarding();}
+  // show onboarding for first-time users (only if not logged in)
+  if(!localStorage.getItem(ONBOARD_KEY)&&!auth.userId){showOnboarding();}
 
-  if(settings.enabled&&settings.url&&settings.key){
-    syncDown().catch(function(){});
+  // auto-refresh session then sync
+  if(auth.refreshToken){
+    refreshSession().then(function(ok){
+      if(ok)syncDown().catch(function(){});
+    });
   }
 
-  // register service worker for offline / installable app (only when hosted)
+  // register service worker
   if("serviceWorker" in navigator && location.protocol.indexOf("http")===0){
     window.addEventListener("load",function(){
       navigator.serviceWorker.register("sw.js").catch(function(){});
