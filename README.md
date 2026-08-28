@@ -59,7 +59,7 @@ Everything is in this repo. To host it yourself:
 
 ## License
 
-MIT — free to use, modify, and share.
+Free to use for personal use. Commercial use not permitted without permission.
 
 ---
 
