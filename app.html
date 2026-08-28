@@ -232,7 +232,7 @@
   <header>
     <div>
       <div class="title">The Reading Room</div>
-      <div class="subtitle">passages worth returning to &middot; v11 <span id="sync-dot" title="Sync status"></span></div>
+      <div class="subtitle">passages worth returning to &middot; v12 <span id="sync-dot" title="Sync status"></span></div>
     </div>
     <div class="count" id="count">0 saved</div>
   </header>
@@ -365,7 +365,7 @@
     if(!auth.userId||!auth.accessToken)return;
     setSyncStatus("syncing","Fetching from cloud…");
     try{
-      var rows=await sbFetch("highlights?shelf_id=eq."+encodeURIComponent(auth.userId)+"&select=*");
+      var rows=await sbFetch("highlights?shelf_id=eq."+encodeURIComponent(auth.userId)+"&select=*&limit=10000");
       if(!Array.isArray(rows)){setSyncStatus("error","Bad response");return;}
       var localMap={};
       state.highlights.forEach(function(h){localMap[h.id]=h;});
